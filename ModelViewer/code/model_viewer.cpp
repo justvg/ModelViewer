@@ -10,7 +10,6 @@
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 
-#include <vector>
 #include <nfd.h>
 
 #define INVALID_TEXTURE 0xFFFFFFFF
@@ -59,6 +58,8 @@ struct mesh
 	uint32_t MaterialIndex;
 };
 
+#include "dynamic_array.h"
+
 enum vbo_type
 {
 	Pos_VBO,
@@ -73,8 +74,8 @@ struct model
 	GLuint VAO;
 	GLuint VBOs[Count_VBO];
 
-	std::vector<mesh> Meshes;
-	std::vector<GLuint> Textures;
+	dynamic_array<mesh> Meshes;
+	dynamic_array<GLuint> Textures;
 };
 
 struct game_state
@@ -135,13 +136,15 @@ UpdateAndRender(game_memory* Memory, game_input* Input, uint32_t BufferWidth, ui
 			aiProcess_FlipUVs | aiProcess_JoinIdenticalVertices);
 		if (Scene)
 		{
-			Model->Meshes.resize(Scene->mNumMeshes);
-			Model->Textures.resize(Scene->mNumMaterials);
+			InitializeDynamicArray(&Model->Meshes);
+			InitializeDynamicArray(&Model->Textures);
+			ResizeDynamicArray(&Model->Meshes, Scene->mNumMeshes);
+			ResizeDynamicArray(&Model->Textures, Scene->mNumMaterials);
 
 			uint32_t VertexCount = 0;
 			uint32_t IndexCount = 0;
 			for (uint32_t MeshIndex = 0;
-				MeshIndex < Model->Meshes.size();
+				MeshIndex < Model->Meshes.EntriesCount;
 				MeshIndex++)
 			{
 				Model->Meshes[MeshIndex].BaseVertex = VertexCount;
@@ -153,17 +156,12 @@ UpdateAndRender(game_memory* Memory, game_input* Input, uint32_t BufferWidth, ui
 				IndexCount += Model->Meshes[MeshIndex].IndexCount;
 			}
 
-			std::vector<vec3> Positions, Normals;
-			std::vector<vec2> TexCoords;
-			std::vector<uint32_t> Indices;
-
-			Positions.reserve(VertexCount);
-			Normals.reserve(VertexCount);
-			TexCoords.reserve(VertexCount);
-			Indices.reserve(IndexCount);
+			dynamic_array<vec3> Positions(VertexCount), Normals(VertexCount);
+			dynamic_array<vec2> TexCoords(VertexCount);
+			dynamic_array<uint32_t> Indices(IndexCount);
 
 			for (uint32_t MeshIndex = 0;
-				MeshIndex < Model->Meshes.size();
+				MeshIndex < Model->Meshes.EntriesCount;
 				MeshIndex++)
 			{
 				const aiMesh* AssimpMesh = Scene->mMeshes[MeshIndex];
@@ -176,9 +174,9 @@ UpdateAndRender(game_memory* Memory, game_input* Input, uint32_t BufferWidth, ui
 					const aiVector3D Normal = AssimpMesh->HasNormals() ? AssimpMesh->mNormals[VertexIndex] : aiVector3D(0.0f);
 					const aiVector3D TexCoord = AssimpMesh->HasTextureCoords(0) ? AssimpMesh->mTextureCoords[0][VertexIndex] : aiVector3D(0.0f);
 
-					Positions.push_back(vec3(Pos.x, Pos.y, Pos.z));
-					Normals.push_back(vec3(Normal.x, Normal.y, Normal.z));
-					TexCoords.push_back(vec2(TexCoord.x, TexCoord.y));
+					PushEntry(&Positions, vec3(Pos.x, Pos.y, Pos.z));
+					PushEntry(&Normals, vec3(Normal.x, Normal.y, Normal.z));
+					PushEntry(&TexCoords, vec2(TexCoord.x, TexCoord.y));
 				}
 
 				for (uint32_t FaceIndex = 0;
@@ -188,9 +186,9 @@ UpdateAndRender(game_memory* Memory, game_input* Input, uint32_t BufferWidth, ui
 					const aiFace Face = AssimpMesh->mFaces[FaceIndex];
 					Assert(Face.mNumIndices == 3);
 
-					Indices.push_back(Face.mIndices[0]);
-					Indices.push_back(Face.mIndices[1]);
-					Indices.push_back(Face.mIndices[2]);
+					PushEntry(&Indices, Face.mIndices[0]);
+					PushEntry(&Indices, Face.mIndices[1]);
+					PushEntry(&Indices, Face.mIndices[2]);
 				}
 			}
 
@@ -225,22 +223,22 @@ UpdateAndRender(game_memory* Memory, game_input* Input, uint32_t BufferWidth, ui
 			}
 
 			glBindBuffer(GL_ARRAY_BUFFER, Model->VBOs[Pos_VBO]);
-			glBufferData(GL_ARRAY_BUFFER, sizeof(vec3) * Positions.size(), &Positions[0], GL_STATIC_DRAW);
+			glBufferData(GL_ARRAY_BUFFER, sizeof(vec3) * Positions.EntriesCount, &Positions[0], GL_STATIC_DRAW);
 			glEnableVertexAttribArray(Pos_VBO);
 			glVertexAttribPointer(Pos_VBO, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
 
 			glBindBuffer(GL_ARRAY_BUFFER, Model->VBOs[Normal_VBO]);
-			glBufferData(GL_ARRAY_BUFFER, sizeof(vec3) * Normals.size(), &Normals[0], GL_STATIC_DRAW);
+			glBufferData(GL_ARRAY_BUFFER, sizeof(vec3) * Normals.EntriesCount, &Normals[0], GL_STATIC_DRAW);
 			glEnableVertexAttribArray(Normal_VBO);
 			glVertexAttribPointer(Normal_VBO, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
 
 			glBindBuffer(GL_ARRAY_BUFFER, Model->VBOs[TexCoord_VBO]);
-			glBufferData(GL_ARRAY_BUFFER, sizeof(vec2) * TexCoords.size(), &TexCoords[0], GL_STATIC_DRAW);
+			glBufferData(GL_ARRAY_BUFFER, sizeof(vec2) * TexCoords.EntriesCount, &TexCoords[0], GL_STATIC_DRAW);
 			glEnableVertexAttribArray(TexCoord_VBO);
 			glVertexAttribPointer(TexCoord_VBO, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
 
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Model->VBOs[Index_VBO]);
-			glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint32_t) * Indices.size(), &Indices[0], GL_STATIC_DRAW);
+			glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint32_t) * Indices.EntriesCount, &Indices[0], GL_STATIC_DRAW);
 		}
 
 		glBindVertexArray(0);
@@ -259,7 +257,7 @@ UpdateAndRender(game_memory* Memory, game_input* Input, uint32_t BufferWidth, ui
 
 	glBindVertexArray(GameState->Model.VAO);
 	for (uint32_t MeshIndex = 0;
-		MeshIndex < GameState->Model.Meshes.size();
+		MeshIndex < GameState->Model.Meshes.EntriesCount;
 		MeshIndex++)
 	{
 		mesh* Mesh = &GameState->Model.Meshes[MeshIndex];
