@@ -1,4 +1,5 @@
 #pragma once
+#include <stdint.h>
 
 template<typename T>
 struct dynamic_array
@@ -18,6 +19,17 @@ struct dynamic_array
 	{
 		InitializeDynamicArray(this, InitialMaxEntriesCount);
 	}
+
+    ~dynamic_array()
+    {
+        MaxEntriesCount = 0;
+        EntriesCount = 0;
+        if(Entries)
+        {
+            free(Entries);
+            Entries = 0;
+        }
+    }
 };
 
 template<typename T>
@@ -49,8 +61,7 @@ void ExpandDynamicArray(dynamic_array<T> *Array, uint32_t ExactMaxEntriesCount =
 
     if(NewMaxEntriesCount > Array->MaxEntriesCount)
     {
-        T *NewMemory = (T *)malloc(NewMaxEntriesCount*sizeof(T));
-
+        T *NewMemory = static_cast<T *>(malloc(NewMaxEntriesCount*sizeof(T)));
         for(uint32_t EntryIndex = 0;
             EntryIndex < Array->EntriesCount;
             EntryIndex++)

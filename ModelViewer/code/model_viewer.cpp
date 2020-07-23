@@ -76,6 +76,9 @@ struct model
 
 	dynamic_array<mesh> Meshes;
 	dynamic_array<GLuint> Textures;
+
+	aabb AABB;
+	mat4 RootTransform;
 };
 
 struct game_state
@@ -101,6 +104,19 @@ Concatenate(char* Dest, char* SrcA, uint32_t SrcALength, char* SrcB, uint32_t Sr
 	}
 
 	*Dest = 0;
+}
+
+static mat4 
+Mat4FromAssimp(const aiMatrix4x4 &AssimpMatrix)
+{
+	mat4 Result;
+
+	Result.a11 = AssimpMatrix.a1; Result.a21 = AssimpMatrix.b1; Result.a31 = AssimpMatrix.c1; Result.a41 = AssimpMatrix.d1;
+	Result.a12 = AssimpMatrix.a2; Result.a22 = AssimpMatrix.b2; Result.a32 = AssimpMatrix.c2; Result.a42 = AssimpMatrix.d2;
+	Result.a13 = AssimpMatrix.a3; Result.a23 = AssimpMatrix.b3; Result.a33 = AssimpMatrix.c3; Result.a43 = AssimpMatrix.d3;
+	Result.a14 = AssimpMatrix.a4; Result.a24 = AssimpMatrix.b4; Result.a34 = AssimpMatrix.c4; Result.a44 = AssimpMatrix.d4;
+
+	return(Result);
 }
 
 void
@@ -136,6 +152,8 @@ UpdateAndRender(game_memory* Memory, game_input* Input, uint32_t BufferWidth, ui
 			aiProcess_FlipUVs | aiProcess_JoinIdenticalVertices);
 		if (Scene)
 		{
+			Model->RootTransform = Mat4FromAssimp(Scene->mRootNode->mTransformation);
+
 			InitializeDynamicArray(&Model->Meshes);
 			InitializeDynamicArray(&Model->Textures);
 			ResizeDynamicArray(&Model->Meshes, Scene->mNumMeshes);
@@ -222,6 +240,8 @@ UpdateAndRender(game_memory* Memory, game_input* Input, uint32_t BufferWidth, ui
 				}
 			}
 
+			Model->AABB = AABBFromVertices(Positions.EntriesCount, Positions.Entries);
+
 			glBindBuffer(GL_ARRAY_BUFFER, Model->VBOs[Pos_VBO]);
 			glBufferData(GL_ARRAY_BUFFER, sizeof(vec3) * Positions.EntriesCount, &Positions[0], GL_STATIC_DRAW);
 			glEnableVertexAttribArray(Pos_VBO);
@@ -247,9 +267,13 @@ UpdateAndRender(game_memory* Memory, game_input* Input, uint32_t BufferWidth, ui
 
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+	vec3 ModelAABBCenter = 0.5f*(GameState->Model.AABB.Min + GameState->Model.AABB.Max);
+	const float TargetHeight = 0.6f;
+	float Scale = TargetHeight / (GameState->Model.AABB.Max.y - GameState->Model.AABB.Min.y);
+
 	mat4 View = LookAt(vec3(0.0f, 0.0f, 3.0f), vec3(0.0f, 0.0f, 0.0f));
 	mat4 PerspectiveProjection = Perspective(45.0f, (float)BufferWidth / (float)BufferHeight, 0.1f, 100.0f);
-	mat4 Model = Translation(vec3(0.0f, -0.8f, 0.0f)) * Rotation(-90.0f, vec3(1.0f, 0.0f, 0.0f)) * Scaling(0.025f);
+	mat4 Model = Scaling(Scale) * GameState->Model.RootTransform * Translation(-ModelAABBCenter);
 	GameState->DefaultShader.Use();
 	GameState->DefaultShader.SetMat4("View", View);
 	GameState->DefaultShader.SetMat4("Projection", PerspectiveProjection);

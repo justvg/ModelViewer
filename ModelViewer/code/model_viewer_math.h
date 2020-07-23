@@ -6,8 +6,8 @@
 #define PI 3.14159265358979323846f
 
 #define Epsilon (1.19e-7f)
-#define int32_t_MIN (-2147483647 - 1)
-#define int32_t_MAX 2147483647
+#define INT32_MIN (-2147483647 - 1)
+#define INT32_MAX 2147483647
 #define UINT32_MAX 0xFFFFFFFF
 #define FLT_MAX 3.402823466e+38F
 
@@ -1240,6 +1240,53 @@ operator*(mat4 A, vec4 B)
 	Result.y = A.a21 * B.x + A.a22 * B.y + A.a23 * B.z + A.a24 * B.w;
 	Result.z = A.a31 * B.x + A.a32 * B.y + A.a33 * B.z + A.a34 * B.w;
 	Result.w = A.a41 * B.x + A.a42 * B.y + A.a43 * B.z + A.a44 * B.w;
+
+	return(Result);
+}
+
+// 
+// NOTE(georgy): AABB
+// 
+
+struct aabb
+{
+	vec3 Min;
+	vec3 Max;
+};
+
+inline aabb
+AABBMinMax(vec3 Min, vec3 Max)
+{
+	aabb Result;
+
+	Result.Min = Min;
+	Result.Max = Max;
+
+	return(Result);
+}
+
+static aabb
+AABBFromVertices(uint32_t Count, vec3 *Vertices)
+{
+	aabb Result;
+	Result.Min = vec3(FLT_MAX);
+	Result.Max = vec3(-FLT_MAX);
+
+	for(uint32_t VertexIndex = 0;
+		VertexIndex < Count;
+		VertexIndex++)
+	{
+		vec3 Vertex = Vertices[VertexIndex];
+
+		if(Vertex.x < Result.Min.x) Result.Min.x = Vertex.x;
+		else if(Vertex.x > Result.Max.x) Result.Max.x = Vertex.x;
+
+		if(Vertex.y < Result.Min.y) Result.Min.y = Vertex.y;
+		else if(Vertex.y > Result.Max.y) Result.Max.y = Vertex.y;
+		
+		if(Vertex.z < Result.Min.z) Result.Min.z = Vertex.z;
+		else if(Vertex.z > Result.Max.z) Result.Max.z = Vertex.z;
+	}
 
 	return(Result);
 }
